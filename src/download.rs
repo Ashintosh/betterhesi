@@ -21,36 +21,19 @@ use tokio::{io::AsyncWriteExt, sync::Semaphore};
 ///
 /// * `Result<(), String>` - `Ok(())` if all downloads are successful, or an error message on failure.
 pub async fn package_list(package_urls: &[String], file_names: &[&str], path: &str) -> Result<(), String> {
-    let package_urls = Arc::new(Mutex::new(package_urls));
-    let file_names = Arc::new(Mutex::new(file_names));
-    let semaphore = Arc::new(Semaphore::new(1)); // Limit to 1 task.
-    let handles: Vec<_> = package_urls
-        .lock()
-        .unwrap()
-        .iter()
-        .zip(file_names.lock().unwrap().iter())
-        .map(|(package_url, file_name)| {
-            let package_url = package_url.to_string();
-            let file_name = file_name.to_string();
-            let full_path = format!("{}{}", path, file_name);
-            let semaphore = Arc::clone(&semaphore);
+    for (package_url, file_name) in package_urls.iter().zip(file_names.iter()) {
+        let package_url = package_url.to_string();
+        let file_name = file_name.to_string();
+        let full_path = format!("{}/{}", path, file_name);
 
-            tokio::spawn(async move {
-                let _permit = semaphore.acquire().await.expect("Semaphore error");
-                if let Err(e) = download_url(&package_url, &full_path, &file_name).await {
-                    return Err(format!("Error downloading {}: {}", file_name, e));
-                }
-                Ok(())
-            })
-        })
-        .collect();
+        println!("downloads url: {}", package_url);
+        println!("downloads filename: {}", file_name);
 
-    // Wait for all download tasks to complete.
-    for handle in handles {
-        if let Err(e) = handle.await {
-            return Err(format!("Task error: {:?}", e));
+        if let Err(e) = download_url(&package_url, &full_path, &file_name).await {
+            return Err(format!("Error downloading {}: {}", file_name, e));
         }
     }
+
     Ok(())
 }
 

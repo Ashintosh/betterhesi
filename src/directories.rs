@@ -118,10 +118,12 @@ pub fn get_desktop_directory() -> Result<String, String> {
 /// # Returns
 ///
 /// * `Option<String>` - The path to the temporary directory if available, or `None` if not found.
-pub fn get_temp_directory() -> Option<String> {
+pub fn get_temp_directory() -> Result<String, String> {
     // Attempt to obtain the temporary directory path as a string.
-    let temp_dir_str = env::temp_dir().to_str().map(|s| s.to_string());
-    temp_dir_str
+    match env::temp_dir().to_str() {
+        Some(temp_dir_str) => Ok(temp_dir_str.to_string()),
+        None => Err("Failed to obtain temporary directory path".to_string()),
+    }
 }
 
 

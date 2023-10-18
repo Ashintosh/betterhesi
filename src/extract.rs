@@ -18,15 +18,16 @@ use compress_tools::{self, Ownership};
 /// # Returns
 ///
 /// * `Result<(), String>` - `Ok(())` if all extractions are successful, or an error message on failure.
-pub async fn archive_list(archive_list: &Vec<String>, path: String) -> Result<(), String> {
+pub async fn archive_list(archive_list: &Vec<String>, paths: Vec<String>) -> Result<(), String> {
     let archive_list = Arc::new(Mutex::new(archive_list));
     let semaphore = Arc::new(Semaphore::new(3));
     let mut handles = Vec::new();
 
+    let mut path_index = 0;
     for archive_guard in archive_list.lock().iter() {
         for archive in archive_guard.iter() {
             let archive = archive.to_string(); // Clone the specific String
-            let mut path = path.clone();
+            let mut path = paths.get(path_index % paths.len()).unwrap().to_string();
             if path.ends_with('/') { path.pop(); }
             let semaphore = Arc::clone(&semaphore);
 
@@ -38,6 +39,7 @@ pub async fn archive_list(archive_list: &Vec<String>, path: String) -> Result<()
                 Ok(())
             });
             handles.push(handle);
+            path_index += 1;
         }
     }
 
