@@ -1,9 +1,8 @@
 use reqwest::Client;
 use byte_unit::Byte;
 use std::error::Error;
-use std::sync::{Arc, Mutex};
+use tokio::io::AsyncWriteExt;
 use indicatif::{ProgressBar, ProgressStyle};
-use tokio::{io::AsyncWriteExt, sync::Semaphore};
 
 
 /// Download a list of packages from specified URLs to the given path.
@@ -25,9 +24,6 @@ pub async fn package_list(package_urls: &[String], file_names: &[&str], path: &s
         let package_url = package_url.to_string();
         let file_name = file_name.to_string();
         let full_path = format!("{}/{}", path, file_name);
-
-        println!("downloads url: {}", package_url);
-        println!("downloads filename: {}", file_name);
 
         if let Err(e) = download_url(&package_url, &full_path, &file_name).await {
             return Err(format!("Error downloading {}: {}", file_name, e));

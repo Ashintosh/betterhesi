@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use tokio::fs;
 
 mod download;
@@ -12,15 +14,25 @@ async fn main() {
     const GAME_EXECUTABLE: &str = "acs.exe";
     const GAME_BASE_DIR: &str = "steamapps/common/assettocorsa";
 
-    let csp: Vec<&str> = vec!["CSP.zip"];
-    let content_manager: Vec<&str> = vec!["latest.zip"];
-    let soul: Vec<&str> = vec!["Sol.zip"];
-    let maps: Vec<&str> = vec!["SRP.zip"];
+    let csp: &str = "CSP.zip";
+    let content_manager: &str = "latest.zip";
+    let soul: &str = "Sol.zip";
+
+    // let csp: Vec<&str> = vec!["CSP.zip"];
+    // let content_manager: Vec<&str> = vec!["latest.zip"];
+    // let soul: Vec<&str> = vec!["Sol.zip"];
+
+    let maps: Vec<&str> = vec![
+        "SRP.zip"
+    ];
+
     let cars: Vec<&str> = vec![
         "cars.zip",
         "cars2.zip",
         "traffic.zip"
     ];
+
+
     //
     
     // Find assettocorsa directory
@@ -82,17 +94,17 @@ async fn main() {
 
     // CSP
     let path = desktop_path.clone();
-    package_list.push(csp[0]);
+    package_list.push(csp);
     extraction_directories.push(path);
 
     // Content manager
     let path = desktop_path.clone();
-    package_list.push(content_manager[0]);
+    package_list.push(content_manager);
     extraction_directories.push(path);
 
     // Soul
     let path = game_path.clone();
-    package_list.push(soul[0]);
+    package_list.push(soul);
     extraction_directories.push(path);
 
     // Maps
@@ -110,10 +122,7 @@ async fn main() {
     }
     //
 
-    for package in &package_list {
-        println!("{package}");
-    }
-
+    // Install packages
     match install_packages(CDN, package_list, extraction_directories).await {
         Ok(()) => (),
         Err(e) => println!("Error: {}", e)
@@ -121,50 +130,55 @@ async fn main() {
 }
 
 async fn install_packages(source: &str, package_list: Vec<&str>, archive_paths: Vec<String>) -> Result<(), String> {
-    let mut package_urls: Vec<String> = Vec::new();
-    let mut archive_list: Vec<String> = Vec::new();
-    let temp_dir: String = match directories::get_temp_directory() {
+    // Find system temp directory
+    let temp_dir = match directories::get_temp_directory() {
         Ok(tmp_path) => format!("{}/betterhesi/", tmp_path),
-        Err(e) => panic!("Error finding temp directory: {}", e)
+        Err(e) => return Err(format!("Error finding temp directory: {}", e)),
     };
-    
-    match fs::create_dir(&temp_dir).await {
-        Ok(_) => (),
-        Err(e) => return Err(format!("Could not create temp directory: {}", e))
+
+    // Create temp subdirectory
+    if let Err(e) = fs::create_dir(&temp_dir).await {
+        return Err(format!("Could not create temp directory: {}", e));
     }
-    
-    for package in &package_list {
-        println!("install_packages: {package}");
-        let package_url: String = format!("{}/{}", source, package);
-        let archive_dir: String = format!("{}{}", &temp_dir, package);
-        package_urls.push(package_url);
-        archive_list.push(archive_dir);
+
+    // Create package download URLs
+    let package_urls: Vec<String> = package_list.iter()
+        .map(|package| {
+            format!("{}/{}", source, package)
+        })
+        .collect();
+
+    // TODO: Change paths to utilize PathBuf
+    // Create archive extraction paths
+    let archive_list: Vec<String> = package_urls.iter()
+    .map(|package_url| {
+        let archive_path = format!("{}/{}", temp_dir, Path::new(package_url).file_name().unwrap().to_str().unwrap());
+        archive_path
+    })
+    .collect();
+
+    // Download and extract packages to given path
+    if let Err(e) = download::package_list(&package_urls, &package_list, &temp_dir).await {
+        return Err(format!("Download Failed: {}", e));
     }
-    
-    match download::package_list(&package_urls, &package_list, &temp_dir).await {
-        Ok(_) => (),
-        Err(e) => return Err(format!("Failed: {}", e))
+    if let Err(e) = extract::archive_list(&archive_list, archive_paths).await {
+        return Err(format!("Extraction failed: {}", e));
     }
-    
-    match extract::archive_list(&archive_list, archive_paths).await {
-        Ok(_) => (),
-        Err(e) => return Err(format!("Extraction failed: {}", e))
-    }
-    
+    //
+
+    // Delete temp files
     for package in &archive_list {
-        match delete_temp_files(package.as_str()).await {
-            Ok(_) => (),
-            Err(e) => return Err(format!("Error: {}", e))
+        if let Err(e) = delete_temp_files(package).await {
+            return Err(format!("IO Error: {}", e));
         }
     }
 
-    if std::path::Path::new(&temp_dir).exists() {
-        match fs::remove_dir(&temp_dir).await {
-            Ok(_) => (),
-            Err(e) => return Err(format!("Could not delete old temp directory: {}", e))
+    // Delete temp file subdirectory
+    if Path::new(&temp_dir).exists() {
+        if let Err(e) = fs::remove_dir(&temp_dir).await {
+            return Err(format!("Could not delete old temp directory: {}", e))
         }
     }
-
     Ok(())
 }
 
